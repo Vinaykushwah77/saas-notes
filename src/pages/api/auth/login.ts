@@ -1,57 +1,27 @@
-import { useState } from "react";
-import Router from "next/router";
+import type { NextApiRequest, NextApiResponse } from "next";
+import prisma from "../../../lib/prisma";
+import bcrypt from "bcryptjs";
+import { signToken } from "../../../lib/jwt";
 
-export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("password");
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") return res.status(405).end();
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: "Missing fields" });
 
-  async function doLogin(e: React.FormEvent) {
-    e.preventDefault();
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) return alert("Login failed");
-    const data = await res.json();
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
-    Router.push("/notes");
-  }
+  const user = await prisma.user.findUnique({ where: { email }, include: { tenant: true } });
+  if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form 
-        onSubmit={doLogin} 
-        className="bg-white p-8 rounded-lg shadow-md w-full max-w-md"
-      >
-        <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">Login</h1>
+  const ok = await bcrypt.compare(password, user.password);
+  if (!ok) return res.status(401).json({ error: "Invalid credentials" });
 
-        <label className="block mb-2 text-gray-700 font-medium">Email</label>
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="Enter your email"
-          className="w-full p-3 border rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          type="email"
-        />
-
-        <label className="block mb-2 text-gray-700 font-medium">Password</label>
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Enter your password"
-          className="w-full p-3 border rounded-md mb-6 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          type="password"
-        />
-
-        <button 
-          type="submit"
-          className="w-full bg-blue-600 text-white p-3 rounded-md hover:bg-blue-700 transition"
-        >
-          Login
-        </button>
-      </form>
-    </div>
-  );
+  const token = signToken({ id: user.id, tenantId: user.tenantId, role: user.role });
+  res.status(200).json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      tenant: { id: user.tenant.id, slug: user.tenant.slug, plan: user.tenant.plan },
+    },
+  });
 }
