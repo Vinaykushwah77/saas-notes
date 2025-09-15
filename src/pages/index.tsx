@@ -3,24 +3,27 @@ import Router from "next/router";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("password");
+  const [password, setPassword] = useState(""); // default "" instead of "password"
 
   async function doLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        return alert(errData.error || "Login failed");
-      }
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_BASE || ""}/auth/login`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        }
+      );
 
       const data = await res.json();
+
+      if (!res.ok) {
+        return alert(data.error || "Login failed");
+      }
+
       localStorage.setItem("token", data.token);
       localStorage.setItem("user", JSON.stringify(data.user));
 
